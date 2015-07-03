@@ -1,16 +1,18 @@
-var express = require('express');
-var app = express();
+var express = require('express')
+var app = express()
 var moment = require('cloud/moment.js')
 
-app.set('views', 'cloud/views');
-app.set('view engine', 'ejs');
-app.use(express.bodyParser());
+var config = require('cloud/config.js')
+
+app.set('views', 'cloud/views')
+app.set('view engine', 'ejs')
+app.use(express.bodyParser())
 
 app.all('/*', function(req, res, next) {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Headers", "X-Requested-With");
-  next();
-});
+  res.header("Access-Control-Allow-Origin", "*")
+  res.header("Access-Control-Allow-Headers", "X-Requested-With")
+  next()
+})
 
 app.post('/duty', function(req, res) {
   var query = new Parse.Query("week")
@@ -32,7 +34,7 @@ app.post('/duty', function(req, res) {
         var query = new Parse.Query("week")
         query.get(results[0].id, {
           success: function(week) {
-            if (req.body.text) {
+            if (req.body.text && config.editors.indexOf(req.body.user_name) > -1) {
               Parse.User.logIn(
                 "duty_bot",
                 req.body.token,
@@ -80,7 +82,7 @@ app.post('/text', function(req, res) {
     return
   }
 
-  if (text) {
+  if (text && config.editors.indexOf(req.body.user_name) > -1) {
     return Parse.User.logIn(
       "text_bot",
       req.body.token
