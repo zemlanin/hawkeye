@@ -1,4 +1,5 @@
 var express = require('express')
+var l = require('cloud/lodash.js')
 var app = express()
 var moment = require('cloud/moment.js')
 
@@ -15,53 +16,82 @@ app.all('/*', function(req, res, next) {
 })
 
 app.post('/duty', function(req, res) {
-  var query = new Parse.Query("week")
+  var Week = Parse.Object.extend("week")
+  var query = new Parse.Query(Week)
+  var dateOnDuty = {
+    "__type": "Date",
+    "iso": moment().set({H: 0, m: 0, s: 0, ms: 0}).format(),
+  }
+  var dateOnDutyEnd = {
+    "__type": "Date",
+    "iso": moment().set({H: 23, m: 59, s: 59, ms: 999}).format(),
+  }
 
   query
-    .greaterThan(
-      "date_on_duty",
-      {
-        "__type": "Date",
-        "iso": moment().subtract(1, 'days').format(),
-      }
-    )
-    .limit(1)
+    .greaterThanOrEqualTo("date_on_duty", dateOnDuty)
+    .lessThanOrEqualTo("date_on_duty", dateOnDutyEnd)
     .ascending("date_on_duty")
+    .first()
+    .then(
+      function (week) {
+        if (!week || req.body.text && config.editors.indexOf(req.body.user_name) > -1) {
+          return Parse.User.logIn("duty_bot", req.body.token)
+            .then(
+              function (user) {
+                var Person = Parse.Object.extend("person")
+                var personQuery = new Parse.Query(Person)
+                var personNamePromise
 
-  query.find({
-    success: function(results) {
-      if (results.length) {
-        var query = new Parse.Query("week")
-        query.get(results[0].id, {
-          success: function(week) {
-            if (req.body.text && config.editors.indexOf(req.body.user_name) > -1) {
-              Parse.User.logIn(
-                "duty_bot",
-                req.body.token,
-                {
-                  success: function(user) {
-                    week.save({"person_name": req.body.text}, {
-                      success: function() {
-                        req.query.slack ? res.send(req.body.text) : res.json({'text': req.body.text})
-                      },
-                      error: function(object, error) { console.error(error) },
-                    })
-                  },
-                  error: function(user, error) { console.error(error) },
+                if (!week) {
+                  week = new Week()
+                  week.set('date_on_duty', new Date(dateOnDuty.iso))
                 }
-              )
-            } else {
-              var personName = week.get('person_name')
-              req.query.slack ? res.send(personName) : res.json({'text': personName})
-            }
-          },
-          error: function(object, error) { console.error(error) }
-        })
-      }
-    },
-    error: function(err) {}
-  });
-});
+
+                if (req.body.text) {
+                  personNamePromise = Parse.Promise.as(req.body.text)
+                } else {
+                  personNamePromise = personQuery
+                    .find()
+                    .then(
+                      function (persons) {
+                        var personsPool = []
+                        var person
+
+                        for (var i = persons.length - 1; i >= 0; i--) {
+                          person = persons[i]
+                          for (var t = 0; t < person.get('chance'); t++) {
+                            personsPool.push(person.get('name'))
+                          }
+                        }
+                        return l.sample(personsPool)
+                      },
+                      function (err) { console.log(err) }
+                    )
+                }
+
+                return personNamePromise
+                  .then(
+                    function (personName) { return week.save({'person_name': personName}) },
+                    function (err) { console.error(err) }
+                  )
+              },
+              function (err) { console.error(err) }
+            )
+        } else {
+          return week
+        }
+      },
+      function (err) { console.error(err) }
+    )
+    .then(
+      function (week) {
+        var personName = week.get('person_name')
+        req.query.slack ? res.send('duty: '+personName) : res.json({'text': personName})
+      },
+      function (err) { console.error(err) }
+    )
+    .done(function () { return Parse.User.logOut() })
+})
 
 app.post('/text', function(req, res) {
   var Message = Parse.Object.extend("Message")
