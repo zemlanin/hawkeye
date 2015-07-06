@@ -35,7 +35,15 @@ app.post('/duty', function(req, res) {
     .then(
       function (week) {
         if (!week || req.body.text && config.editors.indexOf(req.body.user_name) > -1) {
-          return Parse.User.logIn("duty_bot", req.body.token)
+          var userPromise
+
+          if (!week && !req.body.token && !req.body.text) {
+            userPromise = Parse.Promise.as(null)
+          } else {
+            userPromise = Parse.User.logIn("duty_bot", req.body.token)
+          }
+
+          return userPromise
             .then(
               function (user) {
                 var Person = Parse.Object.extend("person")
@@ -71,7 +79,12 @@ app.post('/duty', function(req, res) {
 
                 return personNamePromise
                   .then(
-                    function (personName) { return week.save({'person_name': personName}) },
+                    function (personName) {
+                      return week.save(
+                        {'person_name': personName},
+                        {'useMasterKey': user === null}
+                      )
+                    },
                     function (err) { console.error(err) }
                   )
               },
@@ -126,7 +139,7 @@ app.post('/text', function(req, res) {
         return message.save()
       })
       .then(
-        function (user) { return Parse.User.logOut() }, 
+        function (user) { return Parse.User.logOut() },
         function (err) { console.error(err)}
       )
       .then(function () {
