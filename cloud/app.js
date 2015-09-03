@@ -135,6 +135,7 @@ app.post('/text', function(req, res) {
         message.set({
           "type": type,
           "text": text,
+          "author": req.body.user_name,
         })
         return message.save()
       })
