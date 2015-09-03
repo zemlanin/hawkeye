@@ -134,7 +134,7 @@ app.post('/ready', function(req, res) {
   var text = req.body.text
 
   if (text && !(text === '+' || text === '-')) {
-    req.query.slack ? res.send('only + or -') : res.json({'text': 'only + or -'})
+    req.query.slack ? res.send(type + ': only + or -') : res.json({'text': 'only + or -'})
     return
   }
 
@@ -168,7 +168,7 @@ app.post('/ready', function(req, res) {
       .then(function(message) {
         var response
         if (message) {
-          response = getReadyStatus(message.get('text'), message.get('createdAt'))
+          response = getReadyStatus(message.get('text'), message.createdAt)
         } else {
           response = getReadyStatus('+', null)
         }
