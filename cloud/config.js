@@ -3,7 +3,7 @@ module.exports = {
     "a.verinov",
     "alxpy",
     "r.mamedov",
-    "ratskiller",
+    "s.taran",
     "ivan",
     "i.mozharovsky",
     "emarchenko",
