@@ -20,11 +20,11 @@ app.post('/duty', function(req, res) {
   var query = new Parse.Query(Week)
   var dateOnDuty = {
     "__type": "Date",
-    "iso": moment().set({H: 0, m: 0, s: 0, ms: 0}).format(),
+    "iso": moment().startOf('day').format(),
   }
   var dateOnDutyEnd = {
     "__type": "Date",
-    "iso": moment().set({H: 23, m: 59, s: 59, ms: 999}).format(),
+    "iso": moment().endOf('day').format(),
   }
 
   query
@@ -104,6 +104,77 @@ app.post('/duty', function(req, res) {
       function (err) { console.error(err) }
     )
     .done(function () { return Parse.User.logOut() })
+})
+
+function getReadyStatus(text, createdAtIso) {
+  var waitAfterCreated
+  var createdAt = createdAtIso ? new Date(createdAtIso) : new Date(0)
+  var diffMs = moment().diff(createdAt)
+  var diffHours = parseInt(moment.duration(diffMs).asHours(), 10)
+
+  if (text === '+') {
+    waitAfterCreated = 0
+  } else if (text === '-') {
+    waitAfterCreated = 1
+  } else {
+    return 'error'
+  }
+
+  if (diffHours % 2 === waitAfterCreated) {
+    return 'ready'
+  } else {
+    return 'wait'
+  }
+}
+
+app.post('/ready', function(req, res) {
+  var Message = Parse.Object.extend("Message")
+  var query = new Parse.Query(Message)
+  var type = 'ready'
+  var text = req.body.text
+
+  if (text && !(text === '+' || text === '-')) {
+    req.query.slack ? res.send('only + or -') : res.json({'text': 'only + or -'})
+    return
+  }
+
+  if (text && config.editors.indexOf(req.body.user_name) > -1) {
+    return Parse.User.logIn(
+      "ready_bot",
+      req.body.token
+    )
+      .then(function (user) {
+        var message = new Message()
+        message.set({
+          "type": type,
+          "text": text,
+          "author": req.body.user_name,
+        })
+        return message.save()
+      })
+      .then(
+        function (user) { return Parse.User.logOut() },
+        function (err) { console.error(err)}
+      )
+      .then(function () {
+        var response = getReadyStatus(text, (new Date).toISOString())
+        req.query.slack ? res.send(type+': '+response) : res.json({'text': response})
+      })
+  } else {
+    query
+      .equalTo("type", type)
+      .descending("createdAt")
+      .first()
+      .then(function(message) {
+        var response
+        if (message) {
+          response = getReadyStatus(message.get('text'), message.get('createdAt'))
+        } else {
+          response = getReadyStatus('+', null)
+        }
+        req.query.slack ? res.send(type+': '+response) : res.json({'text': response})
+      })
+  }
 })
 
 app.post('/text', function(req, res) {
